@@ -1,5 +1,5 @@
 const express = require("express");
-
+// https://lit-brushlands-20447.herokuapp.com/
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const ObjectId = require("mongodb").ObjectId;
 
@@ -41,7 +41,10 @@ async function run() {
     await client.connect();
     const toolsCollection = client.db("toolero").collection("tools");
     const bookingCollection = client.db("toolero").collection("bookings");
+    const ordersCollection = client.db("toolero").collection("orders");
     const usersCollection = client.db("toolero").collection("users");
+    const reviewsCollection = client.db("toolero").collection("reviews");
+    const profilesCollection = client.db("toolero").collection("profiles");
 
 
      //get all users
@@ -49,6 +52,7 @@ async function run() {
       const users = await usersCollection.find({}).toArray();
       res.send(users);
     });
+   
     // get user by email who is admin?
     app.get("/admin/:email", verifyJWT ,async (req, res) => {
       const email = req.params.email;
@@ -102,6 +106,25 @@ async function run() {
       const token = jwt.sign({email: email},process.env.ACCESS_TOKEN_SECRET,{ expiresIn: '1h' })
       res.send({result : result,token:token})
   })
+  //set OR update userProfile
+  app.put('/userProfile/:email', async(req,res) => {
+      const email = req.params.email;
+      const user = req.body
+      const filter = {email : email}
+      const options = {upsert : true}
+      const updateDoc = {
+        $set : user
+      }   
+      const result = await profilesCollection.updateOne(filter,updateDoc,options)
+      res.send(result)
+  })
+
+    //get userProfile
+    app.get("/getUserProfile/:email", verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      const userProfile = await profilesCollection.findOne({email : email});
+      res.send(userProfile);
+    });
 
 
    //add booking
@@ -115,20 +138,45 @@ async function run() {
         const result = await bookingCollection.insertOne(booking);
         return res.send({success:true, booking : result});
     });
+    //Add Order
+    app.post("/addOrder", async (req, res) => {
+        const order = req.body;
+        console.log(order);
+        const result = await ordersCollection.insertOne(order);
+        return res.send(result);
+    });
+    // Add Review
+    app.post("/addReview", async (req, res) => {
+        const review = req.body;
+        const result = await reviewsCollection.insertOne(review);
+        return res.send(result);
+    });
 
-      //get booking--------------JWT
-      app.get("/booking", verifyJWT, async (req, res) => {
-          const patientEmail = req.query.email;
+       //get reviews
+       app.get("/getReviews", async (req, res) => {
+        const query = {}; //get all information
+        const cursor = reviewsCollection.find(query);
+        const result = await cursor.toArray();
+        res.send(result);
+      });
+
+
+
+      //get all orders by email--------------JWT
+      app.get("/orders", verifyJWT, async (req, res) => {
+          const userEmail = req.query.email;
           const decodedEmail = req.decoded.email
-          if (patientEmail === decodedEmail) {
-            const query = {patientEmail : patientEmail}
-            const cursor = bookingCollection.find(query);
-            const bookings = await cursor.toArray();
-            return res.send(bookings);
+          if (userEmail === decodedEmail) {
+            const query = {userEmail : userEmail}
+            const cursor = ordersCollection.find(query);
+            const orders = await cursor.toArray();
+            return res.send(orders);
           }else{
             return res.status(403).send({message: "forbidden access"});
           }
       });
+
+      
       //get tools
       app.get("/tools", async (req, res) => {
         const query = {}; //get all information
@@ -136,6 +184,8 @@ async function run() {
         const tools = await cursor.toArray();
         res.send(tools);
       });
+
+      
 
        //get single item by id
       app.get("/item/:id", async (req, res) => {
