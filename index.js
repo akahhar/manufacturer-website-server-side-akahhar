@@ -10,6 +10,9 @@ require("dotenv").config();
 
 const app = express();
 const port = process.env.PORT || 5000;
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
+
 
 //use middleware
 app.use(cors());
@@ -44,6 +47,7 @@ async function run() {
     const usersCollection = client.db("toolero").collection("users");
     const reviewsCollection = client.db("toolero").collection("reviews");
     const profilesCollection = client.db("toolero").collection("profiles");
+    const paymentsCollection = client.db("toolero").collection("payments");
 
     const verifyAdmin = async (req,res,next) => {
       const requester = req.decoded.email;
@@ -60,6 +64,18 @@ async function run() {
       const users = await usersCollection.find({}).toArray();
       res.send(users);
     });
+
+    app.post("/create-payment-intent", verifyJWT, async (req, res) => {
+      const service = req.body;
+      const price = service.price
+      const amount = price*100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount : amount,
+        currency : "usd",
+        payment_method_types : ['card']
+      })
+      res.send({clientSecret : paymentIntent.client_secret})
+    })
    
     // get user by email who is admin?
     app.get("/admin/:email", verifyJWT ,async (req, res) => {
@@ -72,7 +88,6 @@ async function run() {
     app.get("/available", async (req, res) => {
       const date = req.query.date
       const services =  await toolsCollection.find().toArray();
-
       const query = {date: "May 18, 2022"};
       const bookings =  await bookingCollection.find(query).toArray();
 
@@ -93,7 +108,6 @@ async function run() {
           $set : { role : "admin" }
         }
         const result = await usersCollection.updateOne(filter,updateDoc)
-        console.log(result);
         return res.send(result)
       }else{
         return res.status(403).send({message: "Forbidden access"});
@@ -145,13 +159,7 @@ async function run() {
         const result = await bookingCollection.insertOne(booking);
         return res.send({success:true, booking : result});
     });
-    //Add Order
-    app.post("/addOrder", async (req, res) => {
-        const order = req.body;
-        console.log(order);
-        const result = await ordersCollection.insertOne(order);
-        return res.send(result);
-    });
+    
     // Add Review
     app.post("/addReview", async (req, res) => {
         const review = req.body;
@@ -159,30 +167,59 @@ async function run() {
         return res.send(result);
     });
 
-       //get reviews
-       app.get("/getReviews", async (req, res) => {
-        const query = {}; //get all information
-        const cursor = reviewsCollection.find(query);
-        const result = await cursor.toArray();
+    //get reviews
+    app.get("/getReviews", async (req, res) => {
+    const query = {}; //get all information
+    const cursor = reviewsCollection.find(query);
+    const result = await cursor.toArray();
+    res.send(result);
+  });
+
+
+    //Add Order
+    app.post("/addOrder", async (req, res) => {
+      const order = req.body;
+      const result = await ordersCollection.insertOne(order);
+      return res.send(result);
+    });
+    //Get all orders by email--------------JWT
+    app.get("/orders", verifyJWT, async (req, res) => {
+        const userEmail = req.query.email;
+        const decodedEmail = req.decoded.email
+        if (userEmail === decodedEmail) {
+          const query = {userEmail : userEmail}
+          const cursor = ordersCollection.find(query);
+          const orders = await cursor.toArray();
+          return res.send(orders);
+        }else{
+          return res.status(403).send({message: "forbidden access"});
+        }
+    });
+
+      //get a order by id
+      app.get("/order/:id", verifyJWT, async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: ObjectId(id) };
+        const result = await ordersCollection.findOne(query);
         res.send(result);
       });
-
-
-
-      //get all orders by email--------------JWT
-      app.get("/orders", verifyJWT, async (req, res) => {
-          const userEmail = req.query.email;
-          const decodedEmail = req.decoded.email
-          if (userEmail === decodedEmail) {
-            const query = {userEmail : userEmail}
-            const cursor = ordersCollection.find(query);
-            const orders = await cursor.toArray();
-            return res.send(orders);
-          }else{
-            return res.status(403).send({message: "forbidden access"});
+      
+      //update a order by id
+      app.patch("/order/:id", verifyJWT, async (req, res) => {
+        const id = req.params.id;
+        const payment = req.body
+        const filter = { _id: ObjectId(id) };
+        const updateDoc = {
+          $set : {
+            paid : true,
+            tranSactionId : payment.tranSactionId
           }
+        }   
+        const ins = await paymentsCollection.insertOne(payment);
+        const result = await ordersCollection.updateOne(filter,updateDoc)
+        res.send(result);
       });
-
+      
       //delete a order
       app.delete("/order/:id", verifyJWT, async (req, res) => {
         const id = req.params.id;
@@ -191,6 +228,13 @@ async function run() {
         res.send(result);
       });
       
+       // add tools
+       app.post("/addTools", async (req, res) => {
+        const tools = req.body;
+        const result = await toolsCollection.insertOne(tools);
+        return res.send(result);
+      });
+
       //get tools
       app.get("/tools", async (req, res) => {
         const query = {}; //get all information
@@ -198,15 +242,7 @@ async function run() {
         const tools = await cursor.toArray();
         res.send(tools);
       });
-      // add tools
-      app.post("/addTools", async (req, res) => {
-        const tools = req.body;
-        const result = await toolsCollection.insertOne(tools);
-        return res.send(result);
-      });
-
-      
-
+    
        //get single item by id
       app.get("/item/:id", async (req, res) => {
         const id = req.params.id;
