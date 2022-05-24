@@ -34,7 +34,6 @@ function verifyJWT(req,res,next){
       req.decoded = decoded;
       next()
   });
-   
 }
 async function run() {
   try {
@@ -46,6 +45,15 @@ async function run() {
     const reviewsCollection = client.db("toolero").collection("reviews");
     const profilesCollection = client.db("toolero").collection("profiles");
 
+    const verifyAdmin = async (req,res,next) => {
+      const requester = req.decoded.email;
+      const requesterAccount = await usersCollection.findOne({email:requester});
+      if(requesterAccount.role === "admin"){
+        next()
+      }else{
+        return res.status(403).send({message: "Forbidden access"});
+      }
+    }
 
      //get all users
      app.get("/users", verifyJWT, async (req, res) => {
@@ -79,7 +87,6 @@ async function run() {
       const email = req.params.email;
       const requester = req.decoded.email;
       const requesterAccount = await usersCollection.findOne({email:requester});
-      console.log(requesterAccount);
       if(requesterAccount.role === "admin"){
         const filter = {email : email}
         const updateDoc = {
@@ -176,6 +183,13 @@ async function run() {
           }
       });
 
+      //delete a order
+      app.delete("/order/:id", verifyJWT, async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: ObjectId(id) };
+        const result = await ordersCollection.deleteOne(query);
+        res.send(result);
+      });
       
       //get tools
       app.get("/tools", async (req, res) => {
@@ -183,6 +197,12 @@ async function run() {
         const cursor = toolsCollection.find(query);
         const tools = await cursor.toArray();
         res.send(tools);
+      });
+      // add tools
+      app.post("/addTools", async (req, res) => {
+        const tools = req.body;
+        const result = await toolsCollection.insertOne(tools);
+        return res.send(result);
       });
 
       
