@@ -170,7 +170,7 @@ async function run() {
     //get reviews
     app.get("/getReviews", async (req, res) => {
     const query = {}; //get all information
-    const cursor = reviewsCollection.find(query);
+    const cursor = reviewsCollection.find(query).sort({ratting:-1});
     const result = await cursor.toArray();
     res.send(result);
   });
@@ -182,7 +182,13 @@ async function run() {
       const result = await ordersCollection.insertOne(order);
       return res.send(result);
     });
-    //Get all orders by email--------------JWT
+    //get all order
+    app.get("/getOrders", verifyJWT, async (req, res) => {
+        const cursor = ordersCollection.find({});
+        const orders = await cursor.toArray();
+        res.send(orders);
+    });
+    //get order by email--------------JWT
     app.get("/orders", verifyJWT, async (req, res) => {
         const userEmail = req.query.email;
         const decodedEmail = req.decoded.email
@@ -204,6 +210,19 @@ async function run() {
         res.send(result);
       });
       
+      //update a order by id on admin
+      app.patch("/order/admin/:id", verifyJWT, async (req, res) => {
+        const id = req.params.id;
+        const filter = { _id: ObjectId(id) };
+        const updateDoc = {
+          $set : {
+            status : true
+          }
+        }   
+        const result = await ordersCollection.updateOne(filter,updateDoc)
+        res.send(result);
+      });
+      
       //update a order by id
       app.patch("/order/:id", verifyJWT, async (req, res) => {
         const id = req.params.id;
@@ -212,6 +231,7 @@ async function run() {
         const updateDoc = {
           $set : {
             paid : true,
+            status : false,
             tranSactionId : payment.tranSactionId
           }
         }   
@@ -227,12 +247,27 @@ async function run() {
         const result = await ordersCollection.deleteOne(query);
         res.send(result);
       });
+      //delete a tool
+      app.delete("/deleteTool/:id", verifyJWT, async (req, res) => {
+        const id = req.params.id;
+        const query = { _id: ObjectId(id) };
+        const result = await toolsCollection.deleteOne(query);
+        res.send(result);
+      });
       
        // add tools
        app.post("/addTools", async (req, res) => {
         const tools = req.body;
         const result = await toolsCollection.insertOne(tools);
         return res.send(result);
+      });
+
+      //get tools by admin
+      app.get("/getToolsByAdmin",verifyJWT,verifyAdmin, async (req, res) => {
+        const query = {}; //get all information
+        const cursor = toolsCollection.find(query);
+        const tools = await cursor.toArray();
+        res.send(tools);
       });
 
       //get tools
