@@ -18,7 +18,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 app.use(cors());
 app.use(express.json());
 
-const uri = `mongodb+srv://tooleroAdmin:MetIlph2lIN2QblY@cluster0.ls4bo.mongodb.net/?retryWrites=true&w=majority`;
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ls4bo.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -189,8 +189,8 @@ async function run() {
         res.send(orders);
     });
     //get order by email--------------JWT
-    app.get("/orders", verifyJWT, async (req, res) => {
-        const userEmail = req.query.email;
+    app.get("/orders/:email", verifyJWT, async (req, res) => {
+        const userEmail = req.params.email;
         const decodedEmail = req.decoded.email
         if (userEmail === decodedEmail) {
           const query = {userEmail : userEmail}
